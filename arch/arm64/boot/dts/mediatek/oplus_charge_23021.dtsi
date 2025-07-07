@@ -26,6 +26,8 @@
 	FUELGAGUE_APPLY = <(1)>;
 	IS_SUBBOARD_TEMP_SUPPORT = <(0)>;
 	Enable_Is_Force_Full = <(1)>;
+	AGING_FACTOR_MIN = <(90)>;
+	AGING_FACTOR_DIFF = <(1)>;
 	#include "mediatek/bat_setting/mt6895_23021_battery_table_ext.dtsi"
 	#include "mediatek/bat_setting/mt6895_23021_battery_prop_dim2_ext.dtsi"
 };
