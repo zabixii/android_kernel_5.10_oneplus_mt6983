@@ -1,0 +1,53 @@
+name: Fix MTK CPU Scheduler and Build Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix-and-build:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      # Step 1: Checkout the kernel source
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+
+      # Step 2: Replace missing oplus_cpu/sched references with MTK scheduler
+      - name: Fix CPU scheduler paths
+        run: |
+          # Find and replace all references to oplus_cpu/sched
+          find . -type f -name 'Kconfig' -o -name 'Makefile' | xargs sed -i 's|kernel/oplus_cpu/sched|drivers/misc/mediatek/sched|g'
+
+      # Step 3: Ensure include paths in Makefiles are correct
+      - name: Update MTK scheduler Makefile include paths
+        run: |
+          SCHED_MK="drivers/misc/mediatek/sched/Makefile"
+          sed -i '/subdir-ccflags-y/ s|$| -I$(srctree)/drivers/misc/mediatek/sched/|' $SCHED_MK
+
+      # Step 4: Fix defconfig
+      - name: Update defconfig
+        run: |
+          # Backup original
+          cp arch/arm64/configs/gki_defconfig arch/arm64/configs/gki_defconfig.bak
+          # Remove broken CONFIG_MTK_SCHEDULER lines (optional)
+          sed -i '/CONFIG_MTK_SCHEDULER/d' arch/arm64/configs/gki_defconfig
+          # Rebuild defconfig
+          make ARCH=arm64 gki_defconfig
+
+      # Step 5: Build kernel to verify
+      - name: Build kernel
+        run: |
+          # Replace with your cross-compiler if needed
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export ARCH=arm64
+          make -j$(nproc)
+
+      # Step 6: Upload build artifacts
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-build
+          path: arch/arm64/boot/Image
