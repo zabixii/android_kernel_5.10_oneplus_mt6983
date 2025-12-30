@@ -43,7 +43,7 @@ jobs:
           ls -l $OUT_DIR/arch/arm64/boot
 
       - name: Upload kernel image
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: kernel-image
           path: $OUT_DIR/arch/arm64/boot/Image.gz-dtb
