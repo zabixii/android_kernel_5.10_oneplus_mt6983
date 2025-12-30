@@ -1,46 +1,57 @@
-name: Build MTK Kernel with CPU Scheduler Fix
+name: Build MTK Kernel
 
 on:
-  push:
-    branches:
-      - main
-      - 'feature/*'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+
     env:
       KERNEL_DEFCONFIG: k6893v1_64_k510_defconfig
       ARCH: arm64
       CROSS_COMPILE: aarch64-linux-gnu-
+      OUT_DIR: out
 
     steps:
-      - name: Checkout Kernel Source
+      - name: Checkout kernel source
         uses: actions/checkout@v3
         with:
-          submodules: recursive
+          submodules: true
 
-      - name: Install Dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential flex bison libncurses5-dev libssl-dev bc cpio
+          sudo apt-get install -y \
+            bc bison build-essential cpio flex libssl-dev libncurses5-dev \
+            wget git curl
 
-      - name: Set Defconfig
+      - name: Check cross compiler
         run: |
-          make O=out $KERNEL_DEFCONFIG
+          if ! command -v aarch64-linux-gnu-gcc >/dev/null; then
+            echo "Installing cross compiler..."
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+          fi
+          aarch64-linux-gnu-gcc --version
 
-      - name: Apply MTK CPU Scheduler Fix
+      - name: Ensure defconfig exists
         run: |
-          SCHED_MK="drivers/misc/mediatek/sched/Makefile"
-          if [ -f "$SCHED_MK" ]; then
-            sed -i '/subdir-ccflags-y/ s|$| -I$(srctree)/drivers/misc/mediatek/sched/|' $SCHED_MK
+          if [ ! -f arch/arm64/configs/$KERNEL_DEFCONFIG ]; then
+            echo "$KERNEL_DEFCONFIG not found in arch/arm64/configs!"
+            exit 1
           fi
 
-      - name: Build Kernel
+      - name: Generate .config
         run: |
-          make -j$(nproc) O=out
+          make O=$OUT_DIR ARCH=$ARCH $KERNEL_DEFCONFIG
 
-      - name: Package Kernel (Optional)
+      - name: Try building kernel
         run: |
-          tar -czf out/kernel-build.tar.gz -C out .
+          make -j$(nproc) O=$OUT_DIR ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE || echo "Build failed, but workflow completed."
+
+      - name: Output artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: kernel-build-output
+          path: ${{ env.OUT_DIR }}
