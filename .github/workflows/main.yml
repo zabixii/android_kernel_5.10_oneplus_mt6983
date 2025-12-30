@@ -1,54 +1,58 @@
-name: Build LineageOS Kernel
+name: Build MTK Kernel
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-  workflow_dispatch:
-
-env:
-  KERNEL_REPO: lineageos-on-vitamin/android_kernel_oneplus_mt6983
-  KERNEL_DEFCONFIG: k6893v1_64_defconfig
-  OUT_DIR: out
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+
+    env:
+      OUT_DIR: out
+      KERNEL_ARCH: arm64
+      CROSS_COMPILE: aarch64-linux-gnu-
 
     steps:
-      - name: Checkout LineageOS Kernel
+      # 1. Checkout the repo
+      - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          repository: ${{ env.KERNEL_REPO }}
-          fetch-depth: 1
 
-      - name: Install required packages
+      # 2. Install dependencies
+      - name: Install build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y bc bison build-essential flex cpio libssl-dev libncurses5-dev
+          sudo apt update
+          sudo apt install -y build-essential bc bison flex libncurses5-dev libssl-dev ccache \
+                              u-boot-tools git wget curl zip unzip aarch64-linux-gnu
 
-      - name: Install AArch64 cross-compiler
-        run: |
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Create output directory
+      # 3. Prepare output directory
+      - name: Prepare build directory
         run: mkdir -p $OUT_DIR
 
-      - name: Configure kernel
-        run: make O=$OUT_DIR $KERNEL_DEFCONFIG ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+      # 4. Copy device config
+      - name: Use device config
+        run: cp config $OUT_DIR/.config
 
+      # 5. Run olddefconfig to fix missing options
+      - name: Prepare kernel
+        run: make O=$OUT_DIR olddefconfig ARCH=$KERNEL_ARCH CROSS_COMPILE=$CROSS_COMPILE
+
+      # 6. Build kernel
       - name: Build kernel
-        run: make -j$(nproc) O=$OUT_DIR ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+        run: make -j$(nproc) O=$OUT_DIR ARCH=$KERNEL_ARCH CROSS_COMPILE=$CROSS_COMPILE
 
+      # 7. Package the kernel
       - name: Package kernel
         run: |
-          mkdir -p $OUT_DIR/zip
-          cp $OUT_DIR/arch/arm64/boot/Image.gz-dtb $OUT_DIR/zip/
-          cd $OUT_DIR/zip
-          tar -czvf kernel-build.tar.gz *
+          mkdir -p out/kernel
+          cp $OUT_DIR/arch/arm64/boot/Image.gz-dtb out/kernel/
+          cd out && tar -czvf kernel-build.tar.gz kernel
 
+      # 8. Upload artifact
       - name: Upload kernel artifact
         uses: actions/upload-artifact@v4
         with:
           name: kernel-build
-          path: $OUT_DIR/zip/kernel-build.tar.gz
+          path: out/kernel-build.tar.gz
