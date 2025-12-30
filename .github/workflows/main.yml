@@ -1,57 +1,51 @@
 name: Build MTK Kernel
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
+
+env:
+  KERNEL_DEFCONFIG: k6893v1_64_k510_defconfig
+  CROSS_COMPILE: aarch64-linux-gnu-
+  OUT_DIR: out
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-
-    env:
-      KERNEL_DEFCONFIG: k6893v1_64_k510_defconfig
-      ARCH: arm64
-      CROSS_COMPILE: aarch64-linux-gnu-
-      OUT_DIR: out
-
     steps:
-      - name: Checkout kernel source
+      - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          submodules: true
 
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            bc bison build-essential cpio flex libssl-dev libncurses5-dev \
-            wget git curl
+            bc bison build-essential flex cpio libssl-dev libncurses5-dev \
+            git wget curl zip unzip
 
-      - name: Check cross compiler
+      - name: Set up cross-compiler
         run: |
-          if ! command -v aarch64-linux-gnu-gcc >/dev/null; then
-            echo "Installing cross compiler..."
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-          fi
-          aarch64-linux-gnu-gcc --version
+          sudo apt-get install -y gcc-aarch64-linux-gnu
 
-      - name: Ensure defconfig exists
+      - name: Prepare kernel output directory
+        run: mkdir -p $OUT_DIR
+
+      - name: Load kernel config
+        run: make O=$OUT_DIR $KERNEL_DEFCONFIG
+
+      - name: Build kernel
+        run: make -j$(nproc) O=$OUT_DIR
+
+      - name: Package kernel
         run: |
-          if [ ! -f arch/arm64/configs/$KERNEL_DEFCONFIG ]; then
-            echo "$KERNEL_DEFCONFIG not found in arch/arm64/configs!"
-            exit 1
-          fi
+          cd $OUT_DIR
+          tar czf kernel-build.tar.gz *
 
-      - name: Generate .config
-        run: |
-          make O=$OUT_DIR ARCH=$ARCH $KERNEL_DEFCONFIG
-
-      - name: Try building kernel
-        run: |
-          make -j$(nproc) O=$OUT_DIR ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE || echo "Build failed, but workflow completed."
-
-      - name: Output artifacts
+      - name: Upload build artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: kernel-build-output
-          path: ${{ env.OUT_DIR }}
+          path: ${{ env.OUT_DIR }}/kernel-build.tar.gz
