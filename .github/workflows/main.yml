@@ -1,51 +1,47 @@
-name: Build MTK Kernel
+name: Build LineageOS Kernel
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
-
-env:
-  KERNEL_DEFCONFIG: k6893v1_64_k510_defconfig
-  CROSS_COMPILE: aarch64-linux-gnu-
-  OUT_DIR: out
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    env:
+      OUT_DIR: out
+      ARCH: arm64
+      CROSS_COMPILE: aarch64-linux-gnu-
+      DEFCONFIG: k6893v1_64_defconfig   # replace with your device defconfig if different
+
     steps:
-      - name: Checkout repository
+      - name: Checkout kernel source
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-      - name: Install dependencies
+      - name: Checkout device tree
+        uses: actions/checkout@v3
+        with:
+          repository: lineageos-on-vitamin/android_device_oneplus_vitamin-kernel
+          path: device
+
+      - name: Install build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            bc bison build-essential flex cpio libssl-dev libncurses5-dev \
-            git wget curl zip unzip
+          sudo apt update
+          sudo apt install -y git bc bison flex libssl-dev make cpio libncurses5-dev gcc-aarch64-linux-gnu
 
-      - name: Set up cross-compiler
-        run: |
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Prepare kernel output directory
+      - name: Prepare output directory
         run: mkdir -p $OUT_DIR
 
-      - name: Load kernel config
-        run: make O=$OUT_DIR $KERNEL_DEFCONFIG
+      - name: Setup defconfig
+        run: make O=$OUT_DIR $DEFCONFIG
 
       - name: Build kernel
-        run: make -j$(nproc) O=$OUT_DIR
+        run: make O=$OUT_DIR -j$(nproc)
 
-      - name: Package kernel
-        run: |
-          cd $OUT_DIR
-          tar czf kernel-build.tar.gz *
-
-      - name: Upload build artifacts
-        if: always()
+      - name: Upload built kernel
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-build-output
-          path: ${{ env.OUT_DIR }}/kernel-build.tar.gz
+          name: Image.gz-dtb
+          path: $OUT_DIR/arch/arm64/boot/Image.gz-dtb
