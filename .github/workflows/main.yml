@@ -1,54 +1,54 @@
 name: Build LineageOS Kernel
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
+
+env:
+  KERNEL_REPO: lineageos-on-vitamin/android_kernel_oneplus_mt6983
+  KERNEL_DEFCONFIG: k6893v1_64_defconfig
+  OUT_DIR: out
 
 jobs:
   build:
-    name: Build Kernel
     runs-on: ubuntu-22.04
 
-    env:
-      KERNEL_REPO: https://github.com/lineageos-on-vitamin/android_kernel_oneplus_mt6983.git
-      KERNEL_DEFCONFIG: k6893v1_64_defconfig
-      OUT_DIR: out
-      ARCH: arm64
-      CROSS_COMPILE: aarch64-linux-gnu-
-
     steps:
-      - name: Checkout Kernel Repo
+      - name: Checkout LineageOS Kernel
         uses: actions/checkout@v3
         with:
           repository: ${{ env.KERNEL_REPO }}
           fetch-depth: 1
 
-      - name: Install Build Dependencies
+      - name: Install required packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            bc bison build-essential cpio flex libssl-dev libncurses5-dev \
-            libelf-dev dwarves gcc-aarch64-linux-gnu
+          sudo apt-get install -y bc bison build-essential flex cpio libssl-dev libncurses5-dev
 
-      - name: Create Output Directory
+      - name: Install AArch64 cross-compiler
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Create output directory
         run: mkdir -p $OUT_DIR
 
-      - name: Set up Environment
-        run: |
-          export ARCH=$ARCH
-          export CROSS_COMPILE=$CROSS_COMPILE
+      - name: Configure kernel
+        run: make O=$OUT_DIR $KERNEL_DEFCONFIG ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
 
-      - name: Build Kernel
-        run: |
-          make O=$OUT_DIR $KERNEL_DEFCONFIG
-          make -j$(nproc) O=$OUT_DIR
+      - name: Build kernel
+        run: make -j$(nproc) O=$OUT_DIR ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
 
-      - name: Package Kernel
+      - name: Package kernel
         run: |
-          cd $OUT_DIR
-          tar czf kernel-build.tar.gz *
+          mkdir -p $OUT_DIR/zip
+          cp $OUT_DIR/arch/arm64/boot/Image.gz-dtb $OUT_DIR/zip/
+          cd $OUT_DIR/zip
+          tar -czvf kernel-build.tar.gz *
 
-      - name: Upload Kernel Artifact
+      - name: Upload kernel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lineageos-kernel
-          path: $OUT_DIR/kernel-build.tar.gz
+          name: kernel-build
+          path: $OUT_DIR/zip/kernel-build.tar.gz
